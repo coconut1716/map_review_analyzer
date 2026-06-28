@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+xlsx_build/node_modules/
+__pycache__/
+*.py[cod]
+
+# Secrets and local environment
+.env
+*.env
+
+# Generated outputs
+outputs/
+
+# Local backups and old non-review work
+backup/
+archive_yonsei_grade_work/
+
+# Personal or unrelated working files
+study/
+반품향/
+home_town_review/
+school_review/
+
+# Large/generated data files
+*.xlsx
+*.xls
+*.csv
+*.json
+*.ndjson
+*.html
+*.png
+*.jpg
+*.jpeg
+*.mp3
+*.pdf
+*.pptx
+
+# Keep package metadata and documentation trackable
+!package.json
+!package-lock.json
+!README.md
+!docs/**/*.md
+!xlsx_build/readme.md
