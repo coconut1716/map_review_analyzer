@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 xlsx_build/node_modules/
 __pycache__/
@@ -41,3 +41,6 @@ school_review/
 !README.md
 !docs/**/*.md
 !xlsx_build/readme.md
+
+# Private full work timeline
+docs/chat_full_work_timeline.md
