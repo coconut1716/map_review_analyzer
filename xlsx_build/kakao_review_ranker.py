@@ -430,6 +430,23 @@ def default_output_path(input_path: Path) -> Path:
     return input_path.with_name(input_path.stem + "_순위표.html")
 
 
+def region_label_from_source(source: Path) -> str:
+    stem = source.stem
+    for suffix in ("_통합리뷰", "_통합리뷰_자동스크롤", "_combined_reviews", "_reviews"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+    stem = stem.replace("kakao_restaurants_", "")
+    parts = [part for part in stem.split("_") if part]
+    if len(parts) >= 2 and parts[-2].isdigit() and parts[-1].isdigit():
+        parts = parts[:-2]
+    if len(parts) >= 1 and len(parts[-1]) == 8 and parts[-1].isdigit():
+        parts = parts[:-1]
+    if not parts:
+        parent = source.parent.name
+        parts = [part for part in parent.split("_") if part]
+        if len(parts) >= 2 and parts[-2].isdigit() and parts[-1].isdigit():
+            parts = parts[:-2]
+    return " ".join(parts) if parts else source.stem
 def write_csv(path: Path, rows: list[dict]) -> None:
     fields = [
         "순위",
@@ -478,6 +495,7 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap: float, penalty_scale: float, rating_weight: float, rating_baseline: float) -> None:
+    region_label = region_label_from_source(source)
     top_count = sum(1 for row in rows if row["유효리뷰수"] > 0)
     table_rows = []
     for row in rows:
@@ -511,7 +529,7 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
             "</tr>"
         )
 
-    content = f"""<!doctype html>
+    content = fr"""<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -524,7 +542,11 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
   .meta {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0 18px; }}
   .card {{ background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; }}
   .card b {{ display: block; font-size: 20px; margin-top: 4px; }}
-  .formula {{ background: #eef6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px; line-height: 1.6; margin-bottom: 18px; }}
+  .formula {{ background: #eef6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px 18px; line-height: 1.7; margin-bottom: 18px; }}
+  .formula h2 {{ margin: 0 0 12px; font-size: 18px; }}
+  .formula p {{ margin: 10px 0; }}
+  .formula .formula-note {{ color: #374151; font-size: 13px; }}
+  .formula mjx-container[display="true"] {{ margin: 8px 0 14px !important; }}
   table {{ width: 100%; border-collapse: collapse; background: white; border: 1px solid #d1d5db; table-layout: fixed; }}
   th, td {{ border-bottom: 1px solid #e5e7eb; padding: 9px 8px; text-align: right; vertical-align: top; font-size: 12px; }}
   th {{ position: sticky; top: 0; background: #1f4e78; color: white; z-index: 1; }}
@@ -545,11 +567,21 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
     table {{ min-width: 1760px; }}
   }}
 </style>
+<script>
+  window.MathJax = {{
+    tex: {{
+      inlineMath: [["\\(", "\\)"]],
+      displayMath: [["\\[", "\\]"]]
+    }},
+    svg: {{ fontCache: "global" }}
+  }};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 <main>
   <h1>카카오 리뷰 보정 순위표</h1>
-  <div class="note">출처 파일: {html.escape(str(source))}</div>
+  <div class="note">지역: {html.escape(region_label)}</div>
   <section class="meta">
     <div class="card">식당 수<b>{len(rows)}</b></div>
     <div class="card">유효 리뷰가 있는 식당<b>{top_count}</b></div>
@@ -559,17 +591,52 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
     <div class="card">평균별점 가중치<b>{rating_weight:g}</b></div>
   </section>
   <section class="formula">
-    <b>순위식</b><br>
-    리뷰별 차이 = 이 식당에 준 별점 - 리뷰어 평균 별점<br>
-    리뷰수 가중치 φ(n): n≤10은 1+n/3, 10<n≤100은 1+10/3+1.2ln(n/10), n>100은 1+10/3+1.2ln(10)+0.7log₁₀(n/100)<br>
-    팔로워 가중치 ψ(f) = φ(f), 즉 리뷰 수 가중치와 같은 누진식을 사용<br>
-    가중치 = min({weight_cap:g}, φ(리뷰어 총 리뷰수) × ψ(팔로워 수))<br>
-    조작전점수 = Σ(리뷰별 차이 × 가중치) / Σ가중치 × 유효리뷰수 / (유효리뷰수 + {k:g})<br>
-    조작의심점수 = 0.25×날짜집중 + 0.15×동일일자 + 0.25×버스트밀도 + 0.15×버스트주기성 + 0.10×간격균일×버스트밀도 + 0.06×저활동고평점 + 0.04×만점성향<br>
-    날짜/버스트/주기성 위험은 별 5개 리뷰만 대상으로 봅니다. 날짜집중은 별 5개 리뷰 중 가장 빽빽한 7일 구간, 버스트밀도는 별 5개 리뷰 3개 이상이 7일 간격으로 붙은 묶음의 비율입니다.<br>
-    조작후점수 = 조작전점수 - ({penalty_scale:g} × 조작의심점수)<br>
-    평균별점보너스 = {rating_weight:g} × (1 - 조작의심점수) × clip(식당평균별점 - {rating_baseline:g}, -1, 1)<br>
-    최종보정점수 = 조작후점수 + 평균별점보너스
+    <h2>순위식</h2>
+    <p>리뷰별 차이는 해당 식당에 준 별점에서 리뷰어의 평소 평균 별점을 뺀 값입니다.</p>
+    \[
+    d_{{ij}} = r_{{ij}} - \bar{{r}}_i
+    \]
+    <p>리뷰 수 가중치 \(\phi(n)\)는 리뷰어 총 리뷰 수가 많을수록 커지되, 구간별로 증가 속도를 줄이는 누진식입니다.</p>
+    \[
+    \phi(n)=
+    \begin{{cases}}
+    1+\dfrac{{n}}{{3}}, & n\le 10 \\
+    1+\dfrac{{10}}{{3}}+1.2\ln\left(\dfrac{{n}}{{10}}\right), & 10<n\le 100 \\
+    1+\dfrac{{10}}{{3}}+1.2\ln(10)+0.7\log_{{10}}\left(\dfrac{{n}}{{100}}\right), & n>100
+    \end{{cases}}
+    \]
+    <p>팔로워 가중치도 리뷰 수 가중치와 같은 누진식을 사용합니다.</p>
+    \[
+    \psi(f_i)=\phi(f_i)
+    \]
+    <p>최종 리뷰어 가중치는 리뷰 수 가중치와 팔로워 가중치를 곱한 뒤 상한을 적용합니다.</p>
+    \[
+    w_i=\min\left({weight_cap:g},\phi(n_i)\psi(f_i)\right)
+    \]
+    <p>조작 전 점수는 리뷰별 차이의 가중 평균에 유효 리뷰 수 신뢰도 보정을 곱한 값입니다.</p>
+    \[
+    B_j=
+    \frac{{\sum_{{i\in I_j}} d_{{ij}}w_i}}{{\sum_{{i\in I_j}}w_i}}
+    \times
+    \frac{{m_j}}{{m_j+{k:g}}}
+    \]
+    <p>조작의심점수는 날짜 집중, 동일 일자 집중, 버스트 밀도, 주기성, 간격 균일성, 저활동 고평점, 만점 성향을 합산합니다.</p>
+    \[
+    G_j=0.25A_j+0.15D_j+0.25B^{{density}}_j+0.15P_j+0.10R^{{regular*}}_j+0.06U_j+0.04M_j
+    \]
+    <p class="formula-note">날짜/버스트/주기성 위험은 별 5개 리뷰만 대상으로 봅니다. 날짜집중은 별 5개 리뷰 중 가장 빽빽한 7일 구간, 버스트밀도는 별 5개 리뷰 3개 이상이 7일 간격으로 붙은 묶음의 비율입니다.</p>
+    <p>조작 후 점수는 조작 전 점수에서 조작의심점수 기반 감점을 뺀 값입니다.</p>
+    \[
+    Q_j=B_j-({penalty_scale:g}\times G_j)
+    \]
+    <p>평균별점보너스는 조작 의심이 낮을수록 식당 평균 별점을 더 신뢰하도록 설계했습니다.</p>
+    \[
+    R_j={rating_weight:g}\times(1-G_j)\times\operatorname{{clip}}(a_j-{rating_baseline:g},-1,1)
+    \]
+    <p>최종보정점수는 조작 후 점수와 평균별점보너스를 더한 값입니다.</p>
+    \[
+    F_j=Q_j+R_j
+    \]
   </section>
   <table>
     <thead>
