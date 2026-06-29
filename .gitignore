@@ -44,3 +44,6 @@ school_review/
 
 # Private full work timeline
 docs/chat_full_work_timeline.md
+
+# Temporary Kakao API experiments
+tmp_kakao_search_test/

@@ -569,7 +569,9 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
 </style>
 <script>
   window.MathJax = {{
+    loader: {{ load: ["[tex]/ams"] }},
     tex: {{
+      packages: {{"[+]": ["ams"]}},
       inlineMath: [["\\(", "\\)"]],
       displayMath: [["\\[", "\\]"]]
     }},
@@ -599,11 +601,13 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
     <p>리뷰 수 가중치 \(\phi(n)\)는 리뷰어 총 리뷰 수가 많을수록 커지되, 구간별로 증가 속도를 줄이는 누진식입니다.</p>
     \[
     \phi(n)=
-    \begin{{cases}}
-    1+\dfrac{{n}}{{3}}, & n\le 10 \\
-    1+\dfrac{{10}}{{3}}+1.2\ln\left(\dfrac{{n}}{{10}}\right), & 10<n\le 100 \\
-    1+\dfrac{{10}}{{3}}+1.2\ln(10)+0.7\log_{{10}}\left(\dfrac{{n}}{{100}}\right), & n>100
-    \end{{cases}}
+    \left\{{
+    \begin{{array}}{{ll}}
+    1+\dfrac{{n}}{{3}}, & n\le 10 \\[4pt]
+    1+\dfrac{{10}}{{3}}+1.2\ln\left(\dfrac{{n}}{{10}}\right), & 10 \lt n \le 100 \\[4pt]
+    1+\dfrac{{10}}{{3}}+1.2\ln(10)+0.7\log_{{10}}\left(\dfrac{{n}}{{100}}\right), & n \gt 100
+    \end{{array}}
+    \right.
     \]
     <p>팔로워 가중치도 리뷰 수 가중치와 같은 누진식을 사용합니다.</p>
     \[
@@ -693,16 +697,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
-
-
-
-
-
-
-
-
 
 
