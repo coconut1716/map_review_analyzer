@@ -23,14 +23,14 @@ Options:
   --out-dir <path>     저장 폴더. 기본값: outputs/kakao_place_text
   --scrolls <n>        자동 스크롤 전 최소 스크롤 횟수. 기본값: 3
   --no-auto-scroll     총 리뷰수 기반 자동 추가 스크롤을 끔.
-  --fast-threshold <n> 총 리뷰수가 n개 이하면 빠른 수집 프로파일 사용. 기본값: 40
+  --fast-threshold <n> 총 리뷰수가 n개 이하면 빠른 수집 프로파일 사용. 기본값: 20
   --fast-max-scrolls <n> 빠른 프로파일 최대 스크롤. 기본값: 12
   --fast-stall-wait-ms <n> 빠른 프로파일 추가 대기(ms). 기본값: 600
   --max-scrolls <n> 느린 프로파일 자동 스크롤 최대 횟수. 기본값: 200
   --target-coverage <r> 총 리뷰수 대비 목표 수집률. 기본값: 0.95
   --stall-limit <n>    느린 프로파일에서 리뷰 수가 늘지 않을 때 멈추는 반복 횟수. 기본값: 8
-  --stall-wait-ms <n> 느린 프로파일에서 리뷰 수가 안 늘 때 추가 대기 시간(ms). 기본값: 5000
-  --scroll-delay-ms <n> 느린 프로파일 스크롤 사이 대기 시간(ms). 기본값: 1200
+  --stall-wait-ms <n> 느린 프로파일에서 리뷰 수가 안 늘 때 추가 대기 시간(ms). 기본값: 7000
+  --scroll-delay-ms <n> 느린 프로파일 스크롤 사이 대기 시간(ms). 기본값: 600
   --wait-ms <n>        페이지 진입 후 대기 시간(ms). 기본값: 2500
   --limit <n>          앞 n개 URL만 실행. 테스트용.
   --screenshot         전체 페이지 PNG 캡처도 저장.
@@ -57,14 +57,14 @@ function parseArgs(argv) {
     outDir: defaultOutDir,
     scrolls: 3,
     autoScroll: true,
-    fastThreshold: 40,
+    fastThreshold: 20,
     fastMaxScrolls: 12,
     fastStallWaitMs: 600,
     maxScrolls: 200,
     targetCoverage: 0.95,
     stallLimit: 8,
-    stallWaitMs: 5000,
-    scrollDelayMs: 1200,
+    stallWaitMs: 7000,
+    scrollDelayMs: 600,
     waitMs: 2500,
     headed: false,
     screenshot: false,

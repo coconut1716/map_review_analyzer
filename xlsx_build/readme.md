@@ -73,17 +73,23 @@ $env:KAKAO_REST_API_KEY.Length
 
 ## 실행 방법
 
-`xlsx_build` 폴더 안에서 실행한다.
+`xlsx_build` 폴더 안에서 실행한다. 기본 식당 수집 방식은 기준 장소 좌표 주변을 격자로 훑는 `grid` 모드다. `--outer-radius`는 기준 장소에서 최종 유지할 식당 반경(m)이며 기본값은 300m다. 아래 예시는 500m까지 수집한다.
 
 ```powershell
 cd C:\path\to\xlsx_build
-python run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로"
+python run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --outer-radius 500
+```
+
+격자 검색 기본값은 `--grid-step 100`, `--cell-radius 120`이다. 필요하면 직접 지정할 수 있다.
+
+```powershell
+python run_kakao_review_pipeline.py "성북동 주민센터" --outer-radius 500 --grid-step 100 --cell-radius 120 --minimal
 ```
 
 다른 지역을 검색하려면 따옴표 안의 지역명만 바꾼다.
 
 ```powershell
-python run_kakao_review_pipeline.py "서울특별시 마포구 연남동"
+python run_kakao_review_pipeline.py "서울특별시 마포구 연남동" --outer-radius 500
 ```
 
 지역명을 실행 중에 입력하고 싶으면:
@@ -95,7 +101,7 @@ python run_kakao_review_pipeline.py
 테스트로 앞 5개 식당만 수집하려면:
 
 ```powershell
-python run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --limit 5
+python run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --outer-radius 500 --limit 5
 ```
 
 ## 결과 파일 위치

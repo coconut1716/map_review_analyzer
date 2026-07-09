@@ -138,18 +138,24 @@ $env:CHROME_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
 
 ## 빠른 실행
 
-저장소 루트에서 전체 정량 파이프라인을 실행합니다.
+저장소 루트에서 전체 정량 파이프라인을 실행합니다. 기본 식당 수집 방식은 기준 장소 좌표 주변을 격자로 훑는 `grid` 모드입니다. `--outer-radius`는 기준 장소에서 최종 유지할 식당 반경(m)입니다. 기본값은 300m이며, 아래 예시는 500m까지 수집합니다.
 
 ```powershell
-python xlsx_build\run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로"
+python xlsx_build\run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --outer-radius 500
+```
+
+격자 검색 기본값은 `--grid-step 100`, `--cell-radius 120`입니다. 필요하면 직접 지정할 수 있습니다.
+
+```powershell
+python xlsx_build\run_kakao_review_pipeline.py "성북동 주민센터" --outer-radius 500 --grid-step 100 --cell-radius 120 --minimal
 ```
 
 다른 지역을 검색하려면 따옴표 안의 지역명만 바꿉니다.
 
 ```powershell
-python xlsx_build\run_kakao_review_pipeline.py "서울특별시 마포구 연남동"
-python xlsx_build\run_kakao_review_pipeline.py "부산광역시 해운대구 우동"
-python xlsx_build\run_kakao_review_pipeline.py "대전광역시 유성구 궁동"
+python xlsx_build\run_kakao_review_pipeline.py "서울특별시 마포구 연남동" --outer-radius 500
+python xlsx_build\run_kakao_review_pipeline.py "부산광역시 해운대구 우동" --outer-radius 500
+python xlsx_build\run_kakao_review_pipeline.py "대전광역시 유성구 궁동" --outer-radius 500
 ```
 
 지역명을 실행 중에 입력하려면 인자 없이 실행합니다.
@@ -161,7 +167,7 @@ python xlsx_build\run_kakao_review_pipeline.py
 테스트로 앞 5개 식당만 수집하려면 `--limit`을 사용합니다.
 
 ```powershell
-python xlsx_build\run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --limit 5
+python xlsx_build\run_kakao_review_pipeline.py "인천광역시 연수구 송도과학로" --outer-radius 500 --limit 5
 ```
 
 ## 결과 파일 위치

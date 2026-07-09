@@ -40,20 +40,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("region", nargs="?", help="검색할 지역. 비우면 실행 중에 물어봅니다.")
     parser.add_argument("--api-key", default=os.getenv("KAKAO_REST_API_KEY"), help="Kakao REST API 키")
     parser.add_argument("--out-root", type=Path, default=DEFAULT_OUT_ROOT, help="실행 결과를 모을 상위 폴더")
-    parser.add_argument("--mode", choices=["keyword", "category", "both"], default="both")
+    parser.add_argument("--mode", choices=["keyword", "category", "both", "grid"], default="grid")
     parser.add_argument("--radius", type=int, default=2000)
+    parser.add_argument("--outer-radius", type=int, default=300, help="grid 모드 최종 기준점 반경(m)")
+    parser.add_argument("--grid-step", type=int, default=100, help="grid 모드 검색 중심 좌표 간격(m)")
+    parser.add_argument("--cell-radius", type=int, default=120, help="grid 모드 각 격자점 검색 반경(m)")
+    parser.add_argument("--minimal", action="store_true", help="식당 목록 CSV/XLSX에 핵심 필드만 저장")
     parser.add_argument("--max-pages", type=int, default=45)
     parser.add_argument("--size", type=int, default=15)
     parser.add_argument("--delay", type=float, default=0.2)
     parser.add_argument("--limit", type=int, default=0, help="앞 n개 식당만 리뷰 수집. 테스트용")
     parser.add_argument("--scrolls", type=int, default=3)
-    parser.add_argument("--fast-threshold", type=int, default=40)
+    parser.add_argument("--fast-threshold", type=int, default=20)
     parser.add_argument("--max-scrolls", type=int, default=200)
     parser.add_argument("--target-coverage", type=float, default=0.95)
     parser.add_argument("--stall-limit", type=int, default=8)
-    parser.add_argument("--stall-wait-ms", type=int, default=5000)
+    parser.add_argument("--stall-wait-ms", type=int, default=7000)
     parser.add_argument("--wait-ms", type=int, default=2500)
-    parser.add_argument("--scroll-delay-ms", type=int, default=1200)
+    parser.add_argument("--scroll-delay-ms", type=int, default=600)
     parser.add_argument("--headed", action="store_true", help="리뷰 수집 브라우저 창을 보이게 실행")
     parser.add_argument("--k", type=float, default=10.0, help="정량 순위표 리뷰 수 신뢰도 보정 상수")
     parser.add_argument("--weight-cap", type=float, default=10.0, help="리뷰어 가중치 상한")
@@ -91,6 +95,12 @@ def main() -> int:
         args.mode,
         "--radius",
         str(args.radius),
+        "--outer-radius",
+        str(args.outer_radius),
+        "--grid-step",
+        str(args.grid_step),
+        "--cell-radius",
+        str(args.cell_radius),
         "--max-pages",
         str(args.max_pages),
         "--size",
@@ -100,6 +110,8 @@ def main() -> int:
         "--out-dir",
         str(restaurants_dir),
     ]
+    if args.minimal:
+        restaurant_search.append("--minimal")
     run_step("1. 음식점 목록 수집", restaurant_search, env=env)
 
     restaurant_xlsx = latest_xlsx(restaurants_dir, "kakao_restaurants_*.xlsx")
