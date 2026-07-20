@@ -28,10 +28,12 @@ Options:
   --fast-stall-wait-ms <n> 빠른 프로파일 추가 대기(ms). 기본값: 600
   --max-scrolls <n> 느린 프로파일 자동 스크롤 최대 횟수. 기본값: 200
   --target-coverage <r> 총 리뷰수 대비 목표 수집률. 기본값: 0.95
+  --target-review-cap <n> 목표 수집 리뷰 수 상한. 0이면 사용 안 함.
+  --resource-mode <normal|lite> Resource loading mode. normal blocks nothing; lite blocks image/media/font. Default: normal
   --stall-limit <n>    느린 프로파일에서 리뷰 수가 늘지 않을 때 멈추는 반복 횟수. 기본값: 8
-  --stall-wait-ms <n> 느린 프로파일에서 리뷰 수가 안 늘 때 추가 대기 시간(ms). 기본값: 7000
-  --scroll-delay-ms <n> 느린 프로파일 스크롤 사이 대기 시간(ms). 기본값: 600
-  --wait-ms <n>        페이지 진입 후 대기 시간(ms). 기본값: 2500
+  --stall-wait-ms <n> 느린 프로파일에서 리뷰 수가 안 늘 때 추가 대기 시간(ms). 기본값: 2000
+  --scroll-delay-ms <n> 느린 프로파일 스크롤 사이 대기 시간(ms). 기본값: 300
+  --wait-ms <n>        페이지 진입 후 대기 시간(ms). 기본값: 1000
   --limit <n>          앞 n개 URL만 실행. 테스트용.
   --screenshot         전체 페이지 PNG 캡처도 저장.
   --preview            XLSX 미리보기 PNG도 저장.
@@ -62,10 +64,12 @@ function parseArgs(argv) {
     fastStallWaitMs: 600,
     maxScrolls: 200,
     targetCoverage: 0.95,
+    targetReviewCap: 0,
+    resourceMode: "normal",
     stallLimit: 8,
-    stallWaitMs: 7000,
-    scrollDelayMs: 600,
-    waitMs: 2500,
+    stallWaitMs: 2000,
+    scrollDelayMs: 300,
+    waitMs: 1000,
     headed: false,
     screenshot: false,
     preview: false,
@@ -91,6 +95,8 @@ function parseArgs(argv) {
     else if (arg === "--fast-stall-wait-ms") args.fastStallWaitMs = Number(argv[++i] || 0);
     else if (arg === "--max-scrolls") args.maxScrolls = Number(argv[++i] || 0);
     else if (arg === "--target-coverage") args.targetCoverage = Number(argv[++i] || 0);
+    else if (arg === "--target-review-cap") args.targetReviewCap = Number(argv[++i] || 0);
+    else if (arg === "--resource-mode") args.resourceMode = argv[++i] || "normal";
     else if (arg === "--stall-limit") args.stallLimit = Number(argv[++i] || 0);
     else if (arg === "--stall-wait-ms") args.stallWaitMs = Number(argv[++i] || 0);
     else if (arg === "--scroll-delay-ms") args.scrollDelayMs = Number(argv[++i] || 0);
@@ -100,9 +106,82 @@ function parseArgs(argv) {
     else if (arg === "--headed") args.headed = true;
     else args.urls.push(arg);
   }
+  if (!["normal", "lite"].includes(args.resourceMode)) {
+    throw new Error(`--resource-mode must be normal or lite: ${args.resourceMode}`);
+  }
   return args;
 }
 
+const liteBlockedResourceTypes = new Set(["image", "media", "font"]);
+
+function createResourceStats() {
+  return { requested: {}, blocked: {} };
+}
+
+function incrementResourceCount(bucket, type) {
+  const key = String(type || "unknown");
+  bucket[key] = (bucket[key] || 0) + 1;
+}
+
+function cloneResourceCounts(counts) {
+  return Object.fromEntries(Object.entries(counts || {}).map(([key, value]) => [key, Number(value) || 0]));
+}
+
+function diffResourceCounts(after, before) {
+  const diff = {};
+  for (const key of new Set([...Object.keys(after || {}), ...Object.keys(before || {})])) {
+    const value = (after?.[key] || 0) - (before?.[key] || 0);
+    if (value) diff[key] = value;
+  }
+  return diff;
+}
+
+function snapshotResourceStats(stats) {
+  return {
+    requested: cloneResourceCounts(stats.requested),
+    blocked: cloneResourceCounts(stats.blocked),
+  };
+}
+
+function diffResourceStats(after, before) {
+  return {
+    requested: diffResourceCounts(after.requested, before.requested),
+    blocked: diffResourceCounts(after.blocked, before.blocked),
+  };
+}
+
+function mergeResourceCounts(total, counts) {
+  for (const [type, count] of Object.entries(counts || {})) {
+    total[type] = (total[type] || 0) + count;
+  }
+}
+
+function formatResourceCounts(counts) {
+  const entries = Object.entries(counts || {}).filter(([, count]) => count);
+  if (!entries.length) return "none";
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([type, count]) => `${type}:${count}`)
+    .join(", ");
+}
+
+async function configureResourceMode(context, args, stats) {
+  context.on("request", (request) => {
+    incrementResourceCount(stats.requested, request.resourceType());
+  });
+
+  if (args.resourceMode !== "lite") return;
+
+  await context.route("**/*", async (route) => {
+    const type = route.request().resourceType();
+    if (liteBlockedResourceTypes.has(type)) {
+      incrementResourceCount(stats.blocked, type);
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+}
 async function loadPlaywright() {
   const require = createRequire(import.meta.url);
   const candidates = [
@@ -111,6 +190,8 @@ async function loadPlaywright() {
     path.join(toolDir, "node_modules", "playwright", "index.js"),
     path.join(workspaceDir, "node_modules", "playwright-core", "index.js"),
     path.join(workspaceDir, "node_modules", "playwright", "index.js"),
+    path.join(workspaceDir, "node_modules", ".pnpm", "node_modules", "playwright-core", "index.js"),
+    path.join(workspaceDir, "node_modules", ".pnpm", "node_modules", "playwright", "index.js"),
     path.join(process.env.USERPROFILE || "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "node", "node_modules", "playwright", "index.js"),
   ].filter(Boolean);
 
@@ -212,8 +293,10 @@ function captureProgress(summary, args, settings = null) {
   const total = Number(summary.totalReviews) || 0;
   const parsed = Number(summary.parsedReviewCount) || 0;
   const targetCoverage = settings ? settings.targetCoverage : Math.max(0, Math.min(1, Number(args.targetCoverage) || 0));
+  const targetReviewCap = Math.max(0, Number(settings ? settings.targetReviewCap : args.targetReviewCap) || 0);
   const unavailable = Boolean(summary.reviewUnavailable);
-  const target = total ? Math.ceil(total * targetCoverage) : 0;
+  const rawTarget = total ? Math.ceil(total * targetCoverage) : 0;
+  const target = rawTarget && targetReviewCap ? Math.min(rawTarget, targetReviewCap) : rawTarget;
   const coverage = total ? parsed / total : "";
   return { total, parsed, target, coverage, unavailable };
 }
@@ -231,8 +314,9 @@ function scrollSettingsFor(progress, args) {
       maxScrolls: Math.max(minScrolls, Number(args.fastMaxScrolls) || minScrolls),
       stallLimit: 2,
       stallWait: Math.max(0, Number(args.fastStallWaitMs) || 0),
-      delay: 600,
+      delay: 300,
       targetCoverage: 1.0,
+      targetReviewCap: Math.max(0, Number(args.targetReviewCap) || 0),
     };
   }
   return {
@@ -241,11 +325,14 @@ function scrollSettingsFor(progress, args) {
     maxScrolls: args.autoScroll ? Math.max(minScrolls, Number(args.maxScrolls) || minScrolls) : minScrolls,
     stallLimit: Math.max(1, Number(args.stallLimit) || 1),
     stallWait: Math.max(0, Number(args.stallWaitMs) || 0),
-    delay: Math.max(100, Number(args.scrollDelayMs) || 900),
+    delay: Math.max(100, Number(args.scrollDelayMs) || 300),
     targetCoverage: Math.max(0, Math.min(1, Number(args.targetCoverage) || 0)),
+    targetReviewCap: Math.max(0, Number(args.targetReviewCap) || 0),
   };
 }
-async function capturePage(page, url, args) {
+async function capturePage(page, url, args, resourceStats = null) {
+  const startedAt = Date.now();
+  const resourceBefore = resourceStats ? snapshotResourceStats(resourceStats) : createResourceStats();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.waitForTimeout(args.waitMs);
 
@@ -291,7 +378,10 @@ async function capturePage(page, url, args) {
           : "stalled"
       : "unknown_total";
   const coverageText = progress.total ? `${progress.parsed}/${progress.total} (${(progress.coverage * 100).toFixed(1)}%)` : `${progress.parsed}/?`;
-  console.log(`  리뷰 수집: ${coverageText}, 스크롤 ${scrollCount}회, 상태 ${status}, 프로파일 ${settings.profile}`);
+  const durationMs = Date.now() - startedAt;
+  const resources = resourceStats ? diffResourceStats(snapshotResourceStats(resourceStats), resourceBefore) : createResourceStats();
+  console.log(`  reviews: ${coverageText}, scrolls ${scrollCount}, status ${status}, profile ${settings.profile}, duration ${durationMs}ms`);
+  console.log(`  resources requested: ${formatResourceCounts(resources.requested)} / blocked: ${formatResourceCounts(resources.blocked)}`);
 
   return {
     url,
@@ -308,6 +398,9 @@ async function capturePage(page, url, args) {
       maxScrolls: settings.maxScrolls,
       profile: settings.profile,
       status,
+      durationMs,
+      resourceMode: args.resourceMode,
+      resources,
     },
   };
 }
@@ -623,7 +716,25 @@ async function saveCapturedArtifacts(captured, args, page = null) {
   const summary = parsePlaceText(txt, txtPath);
   summary.captureStats = captured.captureStats || {};
   if (!args.combinedXlsx) await saveReviewWorkbook(summary, xlsxPath, args);
-  return { url: captured.url, title: captured.title, txtPath, jsonPath, xlsxPath: args.combinedXlsx ? "" : xlsxPath, screenshotPath: args.screenshot ? screenshotPath : "", textLength: captured.text.length, parsedReviewCount: summary.parsedReviewCount, totalReviews: summary.totalReviews || "", coverage: summary.captureStats.coverage ?? "", captureStatus: summary.captureStats.status || "", scrollCount: summary.captureStats.scrollCount ?? "", summary };
+  return {
+    url: captured.url,
+    title: captured.title,
+    txtPath,
+    jsonPath,
+    xlsxPath: args.combinedXlsx ? "" : xlsxPath,
+    screenshotPath: args.screenshot ? screenshotPath : "",
+    textLength: captured.text.length,
+    parsedReviewCount: summary.parsedReviewCount,
+    totalReviews: summary.totalReviews || "",
+    coverage: summary.captureStats.coverage ?? "",
+    captureStatus: summary.captureStats.status || "",
+    scrollCount: summary.captureStats.scrollCount ?? "",
+    durationMs: summary.captureStats.durationMs ?? "",
+    resourceMode: summary.captureStats.resourceMode || args.resourceMode,
+    resourceRequests: summary.captureStats.resources?.requested || {},
+    resourceBlocked: summary.captureStats.resources?.blocked || {},
+    summary,
+  };
 }
 
 async function saveFromTxt(txtFile, args) {
@@ -657,19 +768,32 @@ async function main() {
   }
 
   if (urls.length) {
+    if (args.screenshot && args.resourceMode === "lite") {
+      console.warn("Warning: --screenshot with --resource-mode lite may produce incomplete screenshots because images are blocked.");
+    }
     const { chromium } = await loadPlaywright();
     const browser = await chromium.launch({ headless: !args.headed, executablePath: findBrowserExecutable() });
-    const page = await browser.newPage({ viewport: { width: 1280, height: 1600 } });
+    const contextOptions = { viewport: { width: 1280, height: 1600 } };
+    if (args.resourceMode === "lite") contextOptions.serviceWorkers = "block";
+    const context = await browser.newContext(contextOptions);
+    const resourceStats = createResourceStats();
+    const totalResources = createResourceStats();
+    await configureResourceMode(context, args, resourceStats);
+    const page = await context.newPage();
     try {
       for (let i = 0; i < urls.length; i++) {
         const url = urls[i];
         console.log(`${i + 1}/${urls.length} ${url}`);
-        const captured = await capturePage(page, url, args);
+        const captured = await capturePage(page, url, args, resourceStats);
+        mergeResourceCounts(totalResources.requested, captured.captureStats?.resources?.requested);
+        mergeResourceCounts(totalResources.blocked, captured.captureStats?.resources?.blocked);
         const row = await saveCapturedArtifacts(captured, args, page);
         indexRows.push(row);
         if (row.summary) combinedSummaries.push(row.summary);
       }
+      console.log(`resource totals (${args.resourceMode}): requested ${formatResourceCounts(totalResources.requested)} / blocked ${formatResourceCounts(totalResources.blocked)}`);
     } finally {
+      await context.close();
       await browser.close();
     }
   }
@@ -694,6 +818,8 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
 
 
 
