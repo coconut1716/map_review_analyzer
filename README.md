@@ -226,6 +226,19 @@ outputs/kakao_restaurants/
 ```powershell
 node xlsx_build\kakao_place_visible_text.mjs --xlsx-file "outputs\kakao_restaurants\restaurants.xlsx" --combined-xlsx "outputs\kakao_place_text\combined_reviews.xlsx"
 ```
+Resource-mode comparison test:
+
+```powershell
+node xlsx_build\kakao_place_visible_text.mjs "https://place.map.kakao.com/450422239#review" --resource-mode normal --out-dir outputs\kakao_place_text_normal --scrolls 1 --max-scrolls 1 --fast-max-scrolls 1 --wait-ms 1000
+node xlsx_build\kakao_place_visible_text.mjs "https://place.map.kakao.com/450422239#review" --resource-mode lite --out-dir outputs\kakao_place_text_lite --scrolls 1 --max-scrolls 1 --fast-max-scrolls 1 --wait-ms 1000
+```
+
+Resource modes:
+
+- normal: no Playwright route is registered, and resources are loaded normally.
+- lite: a BrowserContext route blocks only image, media, and font requests; service workers are blocked too. Stylesheets are not blocked because Kakao page visibility and review layout parsing can depend on CSS-driven rendering.
+- Playwright routing disables HTTP cache for the context, so compare normal and lite by durationMs, parsedReviewCount/coverage, captureStatus, and captureStats.resources in each JSON/index file rather than cache-hit behavior.
+- Screenshots taken in lite mode can be incomplete because images are intentionally blocked.
 
 ### 3. 정량 순위표 생성
 

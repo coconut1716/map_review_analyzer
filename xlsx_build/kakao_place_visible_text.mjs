@@ -30,6 +30,7 @@ Options:
   --target-coverage <r> 총 리뷰수 대비 목표 수집률. 기본값: 0.95
   --target-review-cap <n> 목표 수집 리뷰 수 상한. 0이면 사용 안 함.
   --resource-mode <normal|lite> Resource loading mode. normal blocks nothing; lite blocks image/media/font. Default: normal
+  --resource-stats    Print requested/blocked resource counts to the console. Also enabled by --verbose.
   --stall-limit <n>    느린 프로파일에서 리뷰 수가 늘지 않을 때 멈추는 반복 횟수. 기본값: 8
   --stall-wait-ms <n> 느린 프로파일에서 리뷰 수가 안 늘 때 추가 대기 시간(ms). 기본값: 2000
   --scroll-delay-ms <n> 느린 프로파일 스크롤 사이 대기 시간(ms). 기본값: 300
@@ -66,6 +67,7 @@ function parseArgs(argv) {
     targetCoverage: 0.95,
     targetReviewCap: 0,
     resourceMode: "normal",
+    resourceStats: false,
     stallLimit: 8,
     stallWaitMs: 2000,
     scrollDelayMs: 300,
@@ -97,6 +99,7 @@ function parseArgs(argv) {
     else if (arg === "--target-coverage") args.targetCoverage = Number(argv[++i] || 0);
     else if (arg === "--target-review-cap") args.targetReviewCap = Number(argv[++i] || 0);
     else if (arg === "--resource-mode") args.resourceMode = argv[++i] || "normal";
+    else if (arg === "--resource-stats" || arg === "--verbose") args.resourceStats = true;
     else if (arg === "--stall-limit") args.stallLimit = Number(argv[++i] || 0);
     else if (arg === "--stall-wait-ms") args.stallWaitMs = Number(argv[++i] || 0);
     else if (arg === "--scroll-delay-ms") args.scrollDelayMs = Number(argv[++i] || 0);
@@ -381,7 +384,9 @@ async function capturePage(page, url, args, resourceStats = null) {
   const durationMs = Date.now() - startedAt;
   const resources = resourceStats ? diffResourceStats(snapshotResourceStats(resourceStats), resourceBefore) : createResourceStats();
   console.log(`  reviews: ${coverageText}, scrolls ${scrollCount}, status ${status}, profile ${settings.profile}, duration ${durationMs}ms`);
-  console.log(`  resources requested: ${formatResourceCounts(resources.requested)} / blocked: ${formatResourceCounts(resources.blocked)}`);
+  if (args.resourceStats) {
+    console.log(`  resources requested: ${formatResourceCounts(resources.requested)} / blocked: ${formatResourceCounts(resources.blocked)}`);
+  }
 
   return {
     url,
@@ -791,7 +796,9 @@ async function main() {
         indexRows.push(row);
         if (row.summary) combinedSummaries.push(row.summary);
       }
-      console.log(`resource totals (${args.resourceMode}): requested ${formatResourceCounts(totalResources.requested)} / blocked ${formatResourceCounts(totalResources.blocked)}`);
+      if (args.resourceStats) {
+        console.log(`resource totals (${args.resourceMode}): requested ${formatResourceCounts(totalResources.requested)} / blocked ${formatResourceCounts(totalResources.blocked)}`);
+      }
     } finally {
       await context.close();
       await browser.close();
