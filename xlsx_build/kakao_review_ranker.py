@@ -214,10 +214,6 @@ def build_burst_clusters(dates, max_gap_days: int = 7) -> list[list]:
     return clusters
 
 
-def cluster_center_ordinal(cluster) -> float:
-    return sum(date.toordinal() for date in cluster) / len(cluster)
-
-
 def coefficient_of_variation(values: list[float]) -> float | None:
     values = [value for value in values if value is not None]
     if len(values) < 2:
@@ -237,9 +233,7 @@ def manipulation_metrics(valid: list[dict]) -> dict[str, float | int]:
         "버스트리뷰비율": 0.0,
         "버스트밀도위험": 0.0,
         "버스트클러스터수": 0,
-        "버스트주기성위험": 0.0,
         "리뷰간격균일위험": 0.0,
-        "보정리뷰간격균일위험": 0.0,
         "저활동고평점위험": 0.0,
         "만점성향위험": 0.0,
         "반복버스트위험": 0.0,
@@ -282,16 +276,10 @@ def manipulation_metrics(valid: list[dict]) -> dict[str, float | int]:
     burst_density = burst_review_count / date_n if date_n else 0.0
     burst_density_risk = clamp((burst_density - 0.25) / 0.45) if date_n >= 8 else 0.0
 
-    centers = [cluster_center_ordinal(cluster) for cluster in burst_clusters]
-    center_gaps = [centers[i + 1] - centers[i] for i in range(len(centers) - 1)]
-    center_cv = coefficient_of_variation(center_gaps)
-    periodic_risk = clamp((0.35 - center_cv) / 0.35) if center_cv is not None and len(burst_clusters) >= 3 else 0.0
-
     unique_dates = sorted(set(dates))
     day_gaps = [(unique_dates[i] - unique_dates[i - 1]).days for i in range(1, len(unique_dates))]
     day_gap_cv = coefficient_of_variation(day_gaps)
     regular_risk = clamp((0.45 - day_gap_cv) / 0.45) if day_gap_cv is not None and date_n >= 8 else 0.0
-    regular_adjusted_risk = regular_risk * burst_density_risk
 
     repeated_burst_risk = 1.0 if len(burst_clusters) >= 2 and any(
         (burst_clusters[i + 1][0] - burst_clusters[i][-1]).days >= 30 for i in range(len(burst_clusters) - 1)
@@ -300,8 +288,6 @@ def manipulation_metrics(valid: list[dict]) -> dict[str, float | int]:
         0.25 * date_burst_risk
         + 0.15 * same_day_risk
         + 0.25 * burst_density_risk
-        + 0.15 * periodic_risk
-        + 0.10 * regular_adjusted_risk
         + 0.06 * low_activity_risk
         + 0.04 * perfect_bias_risk
     )
@@ -312,9 +298,7 @@ def manipulation_metrics(valid: list[dict]) -> dict[str, float | int]:
         "버스트리뷰비율": burst_density,
         "버스트밀도위험": burst_density_risk,
         "버스트클러스터수": len(burst_clusters),
-        "버스트주기성위험": periodic_risk,
         "리뷰간격균일위험": regular_risk,
-        "보정리뷰간격균일위험": regular_adjusted_risk,
         "저활동고평점위험": low_activity_risk,
         "만점성향위험": perfect_bias_risk,
         "반복버스트위험": repeated_burst_risk,
@@ -402,9 +386,7 @@ def compute_rankings(places: list[dict[str, str]], reviews: list[dict[str, str]]
                 "버스트리뷰비율": risk["버스트리뷰비율"],
                 "버스트밀도위험": risk["버스트밀도위험"],
                 "버스트클러스터수": risk["버스트클러스터수"],
-                "버스트주기성위험": risk["버스트주기성위험"],
                 "리뷰간격균일위험": risk["리뷰간격균일위험"],
-                "보정리뷰간격균일위험": risk["보정리뷰간격균일위험"],
                 "저활동고평점위험": risk["저활동고평점위험"],
                 "만점성향위험": risk["만점성향위험"],
                 "반복버스트위험": risk["반복버스트위험"],
@@ -479,9 +461,7 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         "버스트리뷰비율",
         "버스트밀도위험",
         "버스트클러스터수",
-        "버스트주기성위험",
         "리뷰간격균일위험",
-        "보정리뷰간격균일위험",
         "저활동고평점위험",
         "만점성향위험",
         "반복버스트위험",
@@ -523,8 +503,6 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
             f"<td>{row['버스트클러스터수']}</td>"
             f"<td>{safe_score(row['버스트리뷰비율'])}</td>"
             f"<td>{safe_score(row['버스트밀도위험'])}</td>"
-            f"<td>{safe_score(row['버스트주기성위험'])}</td>"
-            f"<td>{safe_score(row['보정리뷰간격균일위험'])}</td>"
             f"<td>{safe_score(row['저활동고평점위험'])}</td>"
             "</tr>"
         )
@@ -624,11 +602,11 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
     \times
     \frac{{m_j}}{{m_j+{k:g}}}
     \]
-    <p>조작의심점수는 날짜 집중, 동일 일자 집중, 버스트 밀도, 주기성, 간격 균일성, 저활동 고평점, 만점 성향을 합산합니다.</p>
+    <p>조작의심점수는 날짜 집중, 동일 일자 집중, 버스트 밀도, 저활동 고평점, 만점 성향을 합산합니다.</p>
     \[
-    G_j=0.25A_j+0.15D_j+0.25B^{{density}}_j+0.15P_j+0.10R^{{regular*}}_j+0.06U_j+0.04M_j
+    G_j=0.25A_j+0.15D_j+0.25B^{{density}}_j+0.06U_j+0.04M_j
     \]
-    <p class="formula-note">날짜/버스트/주기성 위험은 별 5개 리뷰만 대상으로 봅니다. 날짜집중은 별 5개 리뷰 중 가장 빽빽한 7일 구간, 버스트밀도는 별 5개 리뷰 3개 이상이 7일 간격으로 붙은 묶음의 비율입니다.</p>
+    <p class="formula-note">날짜/버스트 위험은 별 5개 리뷰만 대상으로 봅니다. 날짜집중은 별 5개 리뷰 중 가장 빽빽한 7일 구간, 버스트밀도는 별 5개 리뷰 3개 이상이 7일 간격으로 붙은 묶음의 비율입니다.</p>
     <p>조작 후 점수는 조작 전 점수에서 조작의심점수 기반 감점을 뺀 값입니다.</p>
     \[
     Q_j=B_j-({penalty_scale:g}\times G_j)
@@ -645,7 +623,7 @@ def write_html(path: Path, rows: list[dict], source: Path, k: float, weight_cap:
   <table>
     <thead>
       <tr>
-        <th>순위</th><th class="name">식당</th><th>최종</th><th>조작전</th><th>의심</th><th>감점</th><th>별점보너스</th><th>조작후</th><th>원점수</th><th>신뢰도</th><th>식당평균</th><th>총리뷰</th><th>캡처</th><th>유효</th><th>최대7일</th><th>동일일</th><th>별5유효</th><th>버스트묶음</th><th>버스트비율</th><th>버스트밀도</th><th>주기성</th><th>균일보정</th><th>저활동고평점</th>
+        <th>순위</th><th class="name">식당</th><th>최종</th><th>조작전</th><th>의심</th><th>감점</th><th>별점보너스</th><th>조작후</th><th>원점수</th><th>신뢰도</th><th>식당평균</th><th>총리뷰</th><th>캡처</th><th>유효</th><th>최대7일</th><th>동일일</th><th>별5유효</th><th>버스트묶음</th><th>버스트비율</th><th>버스트밀도</th><th>저활동고평점</th>
       </tr>
     </thead>
     <tbody>
